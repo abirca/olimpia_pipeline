@@ -123,3 +123,4 @@ CSV Fuentes → 🥉 BRONZE → 🥈 SILVER → 🥇 GOLD → 📊 EXPOSICIÓN
 - ✅ Dataset final CSV con resultados
 - ✅ README con instrucciones end-to-end
 - ✅ Presentación con hallazgos y propuesta de valor
+- ✅ **Dashboard Power BI** (`dashboard/Superintendencia de Transporte.pbix`) con 8 tablas, 8 relaciones, 20 medidas DAX

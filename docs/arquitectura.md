@@ -374,3 +374,53 @@ flowchart TB
 | **Arquitectura de capas** | **Medallion (Bronze/Silver/Gold)** | Linaje completo, recuperabilidad, auditoría regulatoria |
 | Dimensión RUNT | SCD Tipo 1 (sobrescribir) | Solo interesa el estado más reciente de la licencia |
 | Surrogate keys | `sk_ciudadano` autoincremental | Desacopla el modelo analítico del ID natural |
+| **Visualización** | **Power BI Desktop (Import)** | Conecta directamente a Parquet Gold; migrable a DirectLake en Fabric |
+
+---
+
+## 9. Capa de Visualización – Power BI
+
+El reporte `dashboard/Superintendencia de Transporte.pbix` implementa la capa
+de visualización consumiendo directamente los Parquet de **Gold**.
+
+### Arquitectura del modelo semántico
+
+```
+data/gold/*.parquet  →  Power BI Import  →  Modelo Estrella  →  20 Medidas DAX  →  Dashboard
+```
+
+### Tablas cargadas en el modelo
+
+| Tabla | Tipo | Filas | Rol en el modelo |
+|-------|------|-------|------------------|
+| `dim_ciudadano` | Dimensión | 548 | Dimensión central (⭐) |
+| `dim_fecha` | Dimensión | 433 | Tabla de fechas (time intelligence) |
+| `dim_instructor` | Dimensión | 12 | Análisis por instructor CEA |
+| `dim_runt` | Dimensión | 334 | Estado de licencia RUNT |
+| `fact_cea_clases` | Hechos | 500 | Clases CEA granulares |
+| `fact_crc_examenes` | Hechos | 500 | Exámenes CRC granulares |
+| `tabla_cumplimiento` | Agregada | 548 | Vista analítica por ciudadano |
+| `alertas_fraude` | Alertas | 304 | Señales de fraude |
+
+### Relaciones implementadas
+
+| Relación | Cardinalidad | Filtro |
+|----------|-------------|--------|
+| fact_cea → dim_ciudadano (sk_ciudadano) | N:1 | → |
+| fact_cea → dim_fecha (sk_fecha) | N:1 | → |
+| fact_cea → dim_instructor (sk_instructor) | N:1 | → |
+| fact_crc → dim_ciudadano (sk_ciudadano) | N:1 | → |
+| fact_crc → dim_fecha (sk_fecha) | N:1 | → |
+| dim_runt → dim_ciudadano (sk_ciudadano) | N:1 | → |
+| dim_runt → dim_fecha (sk_fecha) | N:1 | → |
+| tabla_cumplimiento ↔ dim_ciudadano (sk_ciudadano) | 1:1 | ↔ |
+
+### Medidas DAX (20 medidas en 5 carpetas)
+
+| Carpeta | Medidas |
+|---------|---------|
+| **KPIs Generales** | Total Ciudadanos, Proceso Completo, % Proceso Completo, Riesgo Alto |
+| **CRC** | CRC Completo, % CRC Completo, Total Examenes CRC, Examenes Aprobados CRC, % Aprobacion CRC |
+| **CEA** | CEA Completo, % CEA Completo, Total Clases CEA, Total Horas CEA, Clases Practicas CEA, Clases Teoricas CEA |
+| **RUNT** | Inconsistencias RUNT, Licencias Activas RUNT, Prom Dias Actualizacion RUNT |
+| **Fraude** | Total Alertas Fraude, Alertas Alta Severidad |

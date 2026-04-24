@@ -25,6 +25,8 @@ olimpia_pipeline/
 │   ├── silver/                     # 🥈 Capa Silver: datos limpios y normalizados
 │   ├── gold/                       # 🥇 Capa Gold: modelo dimensional + cumplimiento + dataset final
 │   └── logs/                       # Auditoría, calidad, alertas, KPIs
+├── dashboard/
+│   └── Superintendencia de Transporte.pbix  # Reporte Power BI conectado a Gold
 ├── docs/
 │   ├── arquitectura.md             # Diseño de arquitectura medallón + diagramas ER (Mermaid)
 │   ├── modelo_datos.md             # Modelo de datos: esquema estrella, tablas, relaciones
@@ -131,8 +133,44 @@ CSV Fuentes (CEA / CRC / RUNT)
 └─────────────────────────┘
          │
          ▼
-   📊 Dashboard Power BI / API REST / Fabric Lakehouse
+   📊 Dashboard Power BI
 ```
+
+---
+
+## Dashboard Power BI – Superintendencia de Transporte
+
+El reporte Power BI (`dashboard/Superintendencia de Transporte.pbix`) se conecta
+directamente a los archivos Parquet de la capa **Gold** e implementa el modelo
+estrella completo.
+
+### Contenido del modelo semántico
+
+| Componente | Detalle |
+|---|---|
+| **Tablas** | 8 tablas: dim_ciudadano, dim_fecha, dim_instructor, dim_runt, fact_cea_clases, fact_crc_examenes, tabla_cumplimiento, alertas_fraude |
+| **Relaciones** | 8 relaciones (7 one-to-many + 1 one-to-one) |
+| **Medidas DAX** | 20 medidas organizadas en carpetas: KPIs Generales, CRC, CEA, RUNT, Fraude |
+| **Tabla de fechas** | dim_fecha marcada como tabla de fechas para time intelligence |
+
+### Medidas DAX disponibles
+
+| Carpeta | Medida | Expresión |
+|---------|--------|-----------|
+| KPIs Generales | Total Ciudadanos | `COUNTROWS(dim_ciudadano)` |
+| KPIs Generales | % Proceso Completo | `DIVIDE([Proceso Completo], [Total Ciudadanos])` |
+| KPIs Generales | Riesgo Alto | `CALCULATE(COUNTROWS(...), nivel_riesgo = "ALTO")` |
+| CRC | Total Examenes CRC | `COUNTROWS(fact_crc_examenes)` |
+| CRC | % Aprobacion CRC | `DIVIDE([Examenes Aprobados CRC], [Total Examenes CRC])` |
+| CEA | Total Clases CEA / Total Horas CEA | `COUNTROWS(...)` / `SUM(horas)` |
+| RUNT | Inconsistencias RUNT / Licencias Activas | Conteos filtrados |
+| Fraude | Total Alertas Fraude / Alertas Alta Severidad | Conteos filtrados |
+
+### Cómo usar
+
+1. Abrir `dashboard/Superintendencia de Transporte.pbix` en Power BI Desktop.
+2. Si los datos no cargan, ir a **Transformar datos → Configuración de origen** y actualizar la ruta de los Parquet a la ubicación local de `data/gold/`.
+3. Hacer clic en **Actualizar** para refrescar los datos.
 
 ---
 
@@ -342,5 +380,6 @@ dim_ciudadano.sk_ciudadano   → 1:1 → tabla_cumplimiento.sk_ciudadano
 - **Great Expectations** para contratos de datos formales
 - Modelo ML de detección de fraude (Isolation Forest / Autoencoder)
 - API REST con **FastAPI** para exposición de la tabla_cumplimiento
-- Integración con **Power BI** vía DirectLake en Microsoft Fabric
+- ~~Integración con **Power BI**~~ ✅ Implementado (`dashboard/Superintendencia de Transporte.pbix`)
+- Migración a **DirectLake** en Microsoft Fabric (actualmente Import desde Parquet)
 - Notificaciones automáticas por correo/Teams vía alertas CRÍTICAS

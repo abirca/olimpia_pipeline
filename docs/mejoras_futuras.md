@@ -15,7 +15,7 @@
 | Mejora | Impacto | Esfuerzo |
 |--------|---------|----------|
 | Despliegue en **Microsoft Fabric** | Escalabilidad, PySpark, Delta Tables, OneLake | Alto |
-| Dashboard **Power BI** con DirectLake | Visualización en tiempo real sin ETL adicional | Medio |
+| Dashboard **Power BI** con DirectLake | ~~Visualización en tiempo real sin ETL adicional~~ | ✅ **HECHO** (Import desde Parquet; migrar a DirectLake en Fabric) |
 | **Data Activator** para alertas | Notificaciones push Teams/Email automáticas | Medio |
 | API REST con **FastAPI** | Exposición programática de tabla_cumplimiento | Medio |
 | Ingesta incremental (CDC) | Procesar solo registros nuevos/modificados | Alto |
