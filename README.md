@@ -134,6 +134,120 @@ CSV Fuentes (CEA / CRC / RUNT)
 
 ---
 
+## Modelo Dimensional – Esquema Estrella (Star Schema)
+
+La capa **Gold** implementa un esquema estrella con `DIM_CIUDADANO` como
+dimensión central y dos tablas de hechos transaccionales.
+
+### Diagrama
+
+```
+                    ┌──────────────────────┐
+                    │   FACT_CEA_CLASES    │
+                    │  (N clases/ciudadano)│
+                    └──────────┬───────────┘
+                               │
+┌──────────────────┐    ┌──────┴──────┐    ┌──────────────────────┐
+│    DIM_RUNT      │────│ DIM_CIUDADANO│────│  FACT_CRC_EXAMENES  │
+│ (1:1 por ciud.)  │    │   ⭐ Centro  │    │ (N exámenes/ciud.)  │
+└──────────────────┘    └──────┬──────┘    └──────────────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                                 │
+   ┌──────────┴───────────┐          ┌──────────┴───────────┐
+   │ TABLA_CUMPLIMIENTO   │          │  ALERTAS_FRAUDE      │
+   │ (1:1 por ciudadano)  │          │ (N alertas/ciud.)    │
+   └──────────────────────┘          └──────────────────────┘
+```
+
+### Tablas y columnas
+
+#### DIM_CIUDADANO (Dimensión Central)
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `sk_ciudadano` | INT (PK) | Surrogate key autoincremental |
+| `ID_ciudadano` | INT (UK) | ID natural del ciudadano |
+
+> **Grain**: 1 fila por ciudadano único.
+
+#### FACT_CEA_CLASES (Hechos)
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `sk_ciudadano` | INT (FK) | → DIM_CIUDADANO |
+| `ID_ciudadano` | INT | ID natural |
+| `clase_norm` | STRING | teorica / practica |
+| `horas` | INT | Horas de la clase |
+| `instructor_norm` | STRING | Instructor (Title Case) |
+| `fecha_date` | DATE | Fecha de la clase |
+| `es_practica` | BOOLEAN | Indicador de clase práctica |
+| `horas_acum_ciudadano` | INT | Horas acumuladas por ciudadano |
+
+> **Grain**: 1 fila por ciudadano + clase + fecha.
+
+#### FACT_CRC_EXAMENES (Hechos)
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `sk_ciudadano` | INT (FK) | → DIM_CIUDADANO |
+| `ID_ciudadano` | INT | ID natural |
+| `tipo_examen_norm` | STRING | medico / psicologico / coordinacion |
+| `resultado_aprobado` | BOOLEAN | Aprobó el examen |
+| `fecha_date` | DATE | Fecha del examen |
+| `examenes_aprobados_acum` | INT | Acumulado de aprobados |
+
+> **Grain**: 1 fila por ciudadano + tipo de examen + fecha.
+
+#### DIM_RUNT (Dimensión – SCD Tipo 1)
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `sk_ciudadano` | INT (FK) | → DIM_CIUDADANO |
+| `ID_ciudadano` | INT | ID natural |
+| `estado_licencia_norm` | STRING | activa / suspendida / cancelada |
+| `licencia_activa` | BOOLEAN | Licencia vigente |
+| `fecha_actualizacion_date` | DATE | Última actualización |
+| `dias_desde_actualizacion` | INT | Días desde última actualización |
+
+> **Grain**: 1 fila por ciudadano (registro más reciente). SCD Tipo 1: se sobrescribe.
+
+#### TABLA_CUMPLIMIENTO (Fact Table Agregada)
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `ID_ciudadano` | INT | ID natural |
+| `crc_completo` | BOOLEAN | 3 tipos de examen aprobados |
+| `cea_completo` | BOOLEAN | Al menos 1 teórica + 1 práctica |
+| `proceso_completo` | BOOLEAN | CRC + CEA ambos completos |
+| `inconsistencia_runt` | BOOLEAN | Desajuste entre proceso y RUNT |
+| `nivel_riesgo` | STRING | BAJO / MEDIO / ALTO / CRITICO |
+| `licencia_activa` | BOOLEAN | Estado actual de licencia |
+
+> **Grain**: 1 fila por ciudadano. Responde directamente las preguntas de negocio.
+
+#### ALERTAS_FRAUDE
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `tipo_alerta` | STRING | Código F1–F5 |
+| `ID_ciudadano` | INT | Ciudadano afectado |
+| `detalle` | STRING | Descripción de la anomalía |
+| `severidad` | STRING | CRITICA / ALTA / MEDIA |
+| `detectado_en` | DATETIME | Timestamp de detección |
+
+### Relaciones y cardinalidades
+
+```
+DIM_CIUDADANO (1) ──── (N) FACT_CEA_CLASES
+DIM_CIUDADANO (1) ──── (N) FACT_CRC_EXAMENES
+DIM_CIUDADANO (1) ──── (1) DIM_RUNT
+DIM_CIUDADANO (1) ──── (1) TABLA_CUMPLIMIENTO
+DIM_CIUDADANO (1) ──── (N) ALERTAS_FRAUDE
+```
+
+---
+
 ## Reglas de negocio implementadas
 
 | Regla | Implementación |
