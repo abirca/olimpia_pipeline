@@ -49,18 +49,19 @@ CSV Fuentes → 🥉 BRONZE → 🥈 SILVER → 🥇 GOLD → 📊 EXPOSICIÓN
 
 ## Diapositiva 3: Modelo de Datos (Estrella)
 
-### Esquema Estrella con DIM_CIUDADANO como centro
+### Esquema Estrella – 4 Dimensiones + 2 Hechos
 
 ```
-        FACT_CEA_CLASES ──── DIM_CIUDADANO ──── FACT_CRC_EXAMENES
-                                   │
-                    DIM_RUNT ──────┼────── TABLA_CUMPLIMIENTO
-                                   │
-                            ALERTAS_FRAUDE
+  DIM_FECHA ──┬── FACT_CEA_CLASES ──── DIM_CIUDADANO ──── FACT_CRC_EXAMENES ──┬── DIM_FECHA
+              │         │                    │                    │            │
+  DIM_INSTRUCTOR ───────┘      DIM_RUNT ─────┼────── TABLA_CUMPLIMIENTO       │
+                                             │                                │
+                                      ALERTAS_FRAUDE                   DIM_FECHA
 ```
 
 **¿Por qué Estrella y no Copo de Nieve?**
-- Solo 2 dimensiones simples → no hay jerarquías profundas.
+- 4 dimensiones conformadas (ciudadano, fecha, instructor, RUNT).
+- `DIM_FECHA` permite análisis temporal; `DIM_INSTRUCTOR` permite control de carga.
 - JOINs de 1 solo nivel → rendimiento óptimo.
 - Power BI opera nativamente con star schema.
 

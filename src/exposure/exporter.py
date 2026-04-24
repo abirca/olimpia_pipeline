@@ -32,7 +32,7 @@ def export_dataset_final(cumplimiento: pd.DataFrame, alertas: pd.DataFrame, kpis
     """
     # ── 1. Exportar tabla cumplimiento a CSV ──────────────────────────────────
     cols_export = [
-        "ID_ciudadano", "crc_completo", "cea_completo",
+        "sk_ciudadano", "ID_ciudadano", "crc_completo", "cea_completo",
         "proceso_completo", "inconsistencia_runt", "nivel_riesgo",
         "licencia_activa", "estado_licencia_norm",
     ]

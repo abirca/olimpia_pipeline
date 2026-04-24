@@ -102,10 +102,15 @@ def build_tabla_cumplimiento(transformed: dict) -> pd.DataFrame:
     dim_runt     = transformed["dim_runt"]
     dim_ciudadano= transformed["dim_ciudadano"]
 
+    # Añadir ID_ciudadano a facts vía dim_ciudadano para agrupar
+    _map_sk = dim_ciudadano[["sk_ciudadano", "ID_ciudadano"]]
+    fact_crc_ext = fact_crc.merge(_map_sk, on="sk_ciudadano", how="left")
+    fact_cea_ext = fact_cea.merge(_map_sk, on="sk_ciudadano", how="left")
+
     # ── Resumen CRC por ciudadano ─────────────────────────────────────────────
     TIPOS_REQUERIDOS = {"medico", "psicologico", "coordinacion"}
 
-    crc_summary = fact_crc.groupby("ID_ciudadano").apply(
+    crc_summary = fact_crc_ext.groupby("ID_ciudadano").apply(
         lambda g: pd.Series({
             "tipos_examen_realizados": set(g["tipo_examen_norm"].dropna().tolist()),
             "total_examenes":          len(g),
@@ -126,12 +131,11 @@ def build_tabla_cumplimiento(transformed: dict) -> pd.DataFrame:
     )
 
     # ── Resumen CEA por ciudadano ─────────────────────────────────────────────
-    cea_summary = fact_cea.groupby("ID_ciudadano").apply(
+    cea_summary = fact_cea_ext.groupby("ID_ciudadano").apply(
         lambda g: pd.Series({
             "clases_teoricas":    int((g["clase_norm"].str.contains("teoric", na=False)).sum()),
             "clases_practicas":   int(g["es_practica"].sum()),
             "total_horas":        int(g["horas"].sum()),
-            "instructores":       g["instructor_norm"].nunique(),
             "ultima_clase_fecha": g["fecha_date"].max(),
         })
     ).reset_index()
@@ -142,13 +146,17 @@ def build_tabla_cumplimiento(transformed: dict) -> pd.DataFrame:
     )
 
     # ── JOIN general ──────────────────────────────────────────────────────────
-    df = dim_ciudadano.merge(crc_summary, on="ID_ciudadano", how="left")
+    df = dim_ciudadano[["sk_ciudadano", "ID_ciudadano"]].merge(
+        crc_summary, on="ID_ciudadano", how="left"
+    )
     df = df.merge(cea_summary, on="ID_ciudadano", how="left")
     df = df.merge(
-        dim_runt[["ID_ciudadano", "estado_licencia_norm", "licencia_activa",
-                  "fecha_actualizacion_date", "dias_desde_actualizacion"]],
-        on="ID_ciudadano", how="left"
+        dim_runt[["sk_ciudadano", "estado_licencia_norm", "licencia_activa",
+                  "dias_desde_actualizacion"]].rename(
+            columns={"sk_ciudadano": "_sk_runt"}),
+        left_on="sk_ciudadano", right_on="_sk_runt", how="left"
     )
+    df.drop(columns=["_sk_runt"], inplace=True, errors="ignore")
 
     # ── Campos de cumplimiento ────────────────────────────────────────────────
     df["crc_completo"]  = df["crc_completo"].fillna(False)
@@ -192,10 +200,17 @@ def detectar_anomalias(transformed: dict, cumplimiento: pd.DataFrame) -> pd.Data
     """
     fact_crc = transformed["fact_crc"]
     fact_cea = transformed["fact_cea"]
+    dim_ciudadano = transformed["dim_ciudadano"]
+    dim_instructor = transformed.get("dim_instructor")
     alertas  = []
 
+    # Mapa sk→ID para facts
+    _map_sk = dim_ciudadano[["sk_ciudadano", "ID_ciudadano"]]
+    fact_crc_ext = fact_crc.merge(_map_sk, on="sk_ciudadano", how="left")
+    fact_cea_ext = fact_cea.merge(_map_sk, on="sk_ciudadano", how="left")
+
     # ── F2: CEA completado en menos de 3 días ─────────────────────────────────
-    cea_span = fact_cea.groupby("ID_ciudadano")["fecha_date"].agg(["min", "max"])
+    cea_span = fact_cea_ext.groupby("ID_ciudadano")["fecha_date"].agg(["min", "max"])
     cea_span["dias_proceso_cea"] = (
         pd.to_datetime(cea_span["max"]) - pd.to_datetime(cea_span["min"])
     ).dt.days
@@ -209,7 +224,7 @@ def detectar_anomalias(transformed: dict, cumplimiento: pd.DataFrame) -> pd.Data
         })
 
     # ── F3: RUNT activo sin ningún CRC ───────────────────────────────────────
-    ids_con_crc   = set(fact_crc["ID_ciudadano"].unique())
+    ids_con_crc   = set(fact_crc_ext["ID_ciudadano"].dropna().unique())
     f3_candidatos = cumplimiento[
         (cumplimiento["licencia_activa"] == True) &
         (~cumplimiento["ID_ciudadano"].isin(ids_con_crc))
@@ -223,7 +238,7 @@ def detectar_anomalias(transformed: dict, cumplimiento: pd.DataFrame) -> pd.Data
         })
 
     # ── F4: Mismo examen, mismo ciudadano, mismo día, resultados distintos ────
-    crc_dups = fact_crc.groupby(
+    crc_dups = fact_crc_ext.groupby(
         ["ID_ciudadano", "tipo_examen_norm", "fecha_date"]
     )["resultado_aprobado"].nunique()
     contradictorios = crc_dups[crc_dups > 1].reset_index()
@@ -236,8 +251,13 @@ def detectar_anomalias(transformed: dict, cumplimiento: pd.DataFrame) -> pd.Data
         })
 
     # ── F5: Instructor con >10 clases en un día ───────────────────────────────
-    if "instructor_norm" in fact_cea.columns and "fecha_date" in fact_cea.columns:
-        instructor_carga = fact_cea.groupby(
+    # Recuperar instructor_norm via dim_instructor
+    if dim_instructor is not None and "sk_instructor" in fact_cea.columns:
+        fact_cea_instr = fact_cea.merge(
+            dim_instructor[["sk_instructor", "instructor_norm"]],
+            on="sk_instructor", how="left"
+        )
+        instructor_carga = fact_cea_instr.groupby(
             ["instructor_norm", "fecha_date"]
         ).size().reset_index(name="clases_dia")
         sobrecargados = instructor_carga[instructor_carga["clases_dia"] > 10]
@@ -252,6 +272,12 @@ def detectar_anomalias(transformed: dict, cumplimiento: pd.DataFrame) -> pd.Data
     df_alertas = pd.DataFrame(alertas)
     if not df_alertas.empty:
         df_alertas["detectado_en"] = datetime.utcnow().isoformat()
+        df_alertas = df_alertas.reset_index(drop=True)
+        df_alertas["sk_alerta"] = df_alertas.index + 1
+        # Reordenar con PK primero
+        cols_order = ["sk_alerta", "ID_ciudadano", "tipo_alerta", "detalle",
+                      "severidad", "detectado_en"]
+        df_alertas = df_alertas[[c for c in cols_order if c in df_alertas.columns]]
         df_alertas.to_parquet(GOLD_DIR / "alertas_fraude.parquet", index=False)
         logger.warning("🚨 %d alertas de fraude detectadas", len(df_alertas))
     else:

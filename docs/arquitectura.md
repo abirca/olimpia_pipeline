@@ -40,7 +40,9 @@ BRONZE  →  SILVER  →  GOLD
 ### GOLD (Capa de Negocio)
 - **Qué contiene**: modelo dimensional (esquema estrella) + tablas de análisis.
 - **Tablas**:
-  - `dim_ciudadano` – dimensión central, todos los IDs únicos con surrogate key.
+  - `dim_ciudadano` – dimensión central, todos los IDs únicos con surrogate key + trazabilidad.
+  - `dim_fecha` – dimensión calendario con año, mes, día, trimestre, fin de semana.
+  - `dim_instructor` – dimensión de instructores CEA únicos.
   - `fact_cea_clases` – hechos granulares de clases (grain: ciudadano + clase + fecha).
   - `fact_crc_examenes` – hechos granulares de exámenes (grain: ciudadano + tipo + fecha).
   - `dim_runt` – estado más reciente de licencia por ciudadano.
@@ -74,6 +76,8 @@ flowchart LR
 
     subgraph Gold["🥇 GOLD – Modelo Estrella"]
         DIM_C["dim_ciudadano"]
+        DIM_F["dim_fecha"]
+        DIM_I["dim_instructor"]
         FACT_CEA["fact_cea_clases"]
         FACT_CRC["fact_crc_examenes"]
         DIM_R["dim_runt"]
@@ -95,7 +99,17 @@ flowchart LR
     S_CEA --> DIM_C
     S_CRC --> DIM_C
     S_RUNT --> DIM_C
+    S_CEA --> DIM_F
+    S_CRC --> DIM_F
+    S_RUNT --> DIM_F
+    S_CEA --> DIM_I
 
+    DIM_C --> FACT_CEA
+    DIM_C --> FACT_CRC
+    DIM_F --> FACT_CEA
+    DIM_F --> FACT_CRC
+    DIM_F --> DIM_R
+    DIM_I --> FACT_CEA
     FACT_CEA --> CUMPL
     FACT_CRC --> CUMPL
     DIM_R --> CUMPL
@@ -118,59 +132,74 @@ flowchart LR
 | Mantenimiento | Sencillo | Complejo |
 
 **Se eligió Esquema Estrella** porque:
-1. Las dimensiones son pocas y simples (ciudadano, RUNT).
+1. Las dimensiones conformadas (ciudadano, fecha, instructor, RUNT) son pocas y simples.
 2. No hay jerarquías profundas que justifiquen normalizar dimensiones en sub-tablas.
 3. Power BI trabaja nativamente con star schema.
 4. El grain de los hechos es el más granular posible (cada clase / cada examen).
-5. `tabla_cumplimiento` es una **fact table desnormalizada** (una fila por ciudadano) optimizada para el dashboard.
+5. `DIM_FECHA` habilita análisis temporal (trimestre, mes, fin de semana) sin lógica en consultas.
+6. `DIM_INSTRUCTOR` permite análisis de carga y detección de fraude (F5) por instructor.
+7. `tabla_cumplimiento` es una **fact table desnormalizada** (una fila por ciudadano) optimizada para el dashboard.
 
 ### Diagrama Entidad-Relación (Gold Layer)
 
 ```mermaid
 erDiagram
     DIM_CIUDADANO {
-        int sk_ciudadano PK "Surrogate Key"
-        int ID_ciudadano UK "ID natural del ciudadano"
+        bigint sk_ciudadano PK "Surrogate Key"
+        bigint ID_ciudadano NK "ID natural del ciudadano"
+        string _gold_run_id "ID corrida Gold"
+        timestamp _created_at "Fecha creacion"
+    }
+
+    DIM_FECHA {
+        int sk_fecha PK "Surrogate Key"
+        date fecha "Fecha calendario"
+        int anio "Anio"
+        int mes "Mes 1-12"
+        int dia "Dia del mes"
+        int trimestre "Trimestre 1-4"
+        string nombre_mes "Nombre del mes"
+        boolean es_fin_semana "Sabado o domingo"
+    }
+
+    DIM_INSTRUCTOR {
+        bigint sk_instructor PK "Surrogate Key"
+        string instructor_norm "Nombre instructor Title Case"
     }
 
     FACT_CEA_CLASES {
-        int sk_ciudadano FK "FK dim_ciudadano"
-        int ID_ciudadano FK "ID natural"
-        string clase_norm "Tipo de clase (teorica/practica)"
+        bigint sk_fact_cea PK "Surrogate Key del hecho"
+        bigint sk_ciudadano FK "FK dim_ciudadano"
+        int sk_fecha FK "FK dim_fecha"
+        bigint sk_instructor FK "FK dim_instructor"
+        string clase_norm "Tipo de clase teorica o practica"
         int horas "Horas de la clase"
-        string instructor_norm "Nombre instructor"
-        date fecha_date "Fecha de la clase"
         boolean es_practica "Es clase practica"
         int horas_acum_ciudadano "Horas acumuladas"
-        string _source "Fuente origen"
-        datetime _ingested_at "Timestamp ingesta"
+        date fecha_date "Fecha de la clase"
     }
 
     FACT_CRC_EXAMENES {
-        int sk_ciudadano FK "FK dim_ciudadano"
-        int ID_ciudadano FK "ID natural"
+        bigint sk_fact_crc PK "Surrogate Key del hecho"
+        bigint sk_ciudadano FK "FK dim_ciudadano"
+        int sk_fecha FK "FK dim_fecha"
         string tipo_examen_norm "medico psicologico coordinacion"
         boolean resultado_aprobado "Aprobo el examen"
-        date fecha_date "Fecha del examen"
         int examenes_aprobados_acum "Acumulado aprobados"
-        string _source "Fuente origen"
-        datetime _ingested_at "Timestamp ingesta"
+        date fecha_date "Fecha del examen"
     }
 
     DIM_RUNT {
-        int sk_ciudadano FK "FK dim_ciudadano"
-        int ID_ciudadano FK "ID natural"
+        bigint sk_runt PK "Surrogate Key"
+        bigint sk_ciudadano FK "FK dim_ciudadano"
+        int sk_fecha FK "FK dim_fecha"
         string estado_licencia_norm "activa suspendida cancelada"
         boolean licencia_activa "Licencia vigente"
-        date fecha_actualizacion_date "Ultima actualizacion"
         int dias_desde_actualizacion "Dias desde ultima actualizacion"
-        string _source "Fuente origen"
-        datetime _ingested_at "Timestamp ingesta"
     }
 
     TABLA_CUMPLIMIENTO {
-        int sk_ciudadano FK "FK dim_ciudadano"
-        int ID_ciudadano FK "ID natural"
+        bigint sk_ciudadano PK "PK y FK dim_ciudadano"
         boolean crc_completo "3 examenes aprobados"
         boolean cea_completo "Teorica y practica"
         boolean proceso_completo "CRC y CEA completos"
@@ -179,11 +208,12 @@ erDiagram
     }
 
     ALERTAS_FRAUDE {
+        bigint sk_alerta PK "Surrogate Key"
+        bigint ID_ciudadano FK "Ciudadano afectado"
         string tipo_alerta "F1 a F5 codigo de alerta"
-        int ID_ciudadano FK "Ciudadano afectado"
         string detalle "Descripcion de la anomalia"
         string severidad "CRITICA ALTA MEDIA"
-        datetime detectado_en "Timestamp deteccion"
+        timestamp detectado_en "Timestamp deteccion"
     }
 
     DIM_CIUDADANO ||--o{ FACT_CEA_CLASES : "tiene clases"
@@ -191,27 +221,39 @@ erDiagram
     DIM_CIUDADANO ||--o| DIM_RUNT : "tiene licencia"
     DIM_CIUDADANO ||--o| TABLA_CUMPLIMIENTO : "resumen cumplimiento"
     DIM_CIUDADANO ||--o{ ALERTAS_FRAUDE : "alertas asociadas"
+    DIM_FECHA ||--o{ FACT_CEA_CLASES : "fecha clase"
+    DIM_FECHA ||--o{ FACT_CRC_EXAMENES : "fecha examen"
+    DIM_FECHA ||--o{ DIM_RUNT : "fecha actualizacion"
+    DIM_INSTRUCTOR ||--o{ FACT_CEA_CLASES : "instructor clase"
 ```
 
 ### Estructura Visual del Esquema Estrella
 
 ```mermaid
 graph TD
-    CENTER["⭐ DIM_CIUDADANO<br/>sk_ciudadano PK<br/>ID_ciudadano UK"]
+    CENTER["⭐ DIM_CIUDADANO<br/>sk_ciudadano PK<br/>ID_ciudadano NK"]
 
-    FACT1["📋 FACT_CEA_CLASES<br/>grain: ciudadano+clase+fecha<br/>horas, instructor, es_practica"]
-    FACT2["📋 FACT_CRC_EXAMENES<br/>grain: ciudadano+examen+fecha<br/>tipo_examen, resultado_aprobado"]
-    DIM1["📦 DIM_RUNT<br/>estado licencia mas reciente<br/>licencia_activa, dias_actualizacion"]
-    AGG["📊 TABLA_CUMPLIMIENTO<br/>1 fila por ciudadano<br/>crc_completo, cea_completo, nivel_riesgo"]
-    FRAUD["🚨 ALERTAS_FRAUDE<br/>anomalias detectadas<br/>tipo_alerta, severidad"]
+    DIMF["📅 DIM_FECHA<br/>sk_fecha PK<br/>fecha, anio, mes, trimestre"]
+    DIMI["👤 DIM_INSTRUCTOR<br/>sk_instructor PK<br/>instructor_norm"]
+    FACT1["📋 FACT_CEA_CLASES<br/>sk_fact_cea PK<br/>sk_ciudadano FK, sk_fecha FK, sk_instructor FK<br/>clase_norm, horas, es_practica"]
+    FACT2["📋 FACT_CRC_EXAMENES<br/>sk_fact_crc PK<br/>sk_ciudadano FK, sk_fecha FK<br/>tipo_examen, resultado_aprobado"]
+    DIM1["📦 DIM_RUNT<br/>sk_runt PK<br/>sk_ciudadano FK, sk_fecha FK<br/>estado_licencia, licencia_activa"]
+    AGG["📊 TABLA_CUMPLIMIENTO<br/>sk_ciudadano PK/FK<br/>crc_completo, cea_completo, nivel_riesgo"]
+    FRAUD["🚨 ALERTAS_FRAUDE<br/>sk_alerta PK<br/>tipo_alerta, severidad"]
 
     CENTER --- FACT1
     CENTER --- FACT2
     CENTER --- DIM1
     CENTER --- AGG
     CENTER --- FRAUD
+    DIMF --- FACT1
+    DIMF --- FACT2
+    DIMF --- DIM1
+    DIMI --- FACT1
 
     style CENTER fill:#FFD700,stroke:#333,color:#000
+    style DIMF fill:#90EE90,stroke:#333,color:#000
+    style DIMI fill:#90EE90,stroke:#333,color:#000
     style FACT1 fill:#87CEEB,stroke:#333,color:#000
     style FACT2 fill:#87CEEB,stroke:#333,color:#000
     style DIM1 fill:#90EE90,stroke:#333,color:#000
@@ -226,8 +268,12 @@ graph TD
 | Tabla Origen | Columna FK | → Tabla Destino | Columna PK | Cardinalidad | Descripción |
 |-------------|-----------|----------------|-----------|-------------|-------------|
 | `fact_cea_clases` | `sk_ciudadano` | `dim_ciudadano` | `sk_ciudadano` | N:1 | Cada clase pertenece a un ciudadano |
+| `fact_cea_clases` | `sk_fecha` | `dim_fecha` | `sk_fecha` | N:1 | Cada clase tiene una fecha |
+| `fact_cea_clases` | `sk_instructor` | `dim_instructor` | `sk_instructor` | N:1 | Cada clase tiene un instructor |
 | `fact_crc_examenes` | `sk_ciudadano` | `dim_ciudadano` | `sk_ciudadano` | N:1 | Cada examen pertenece a un ciudadano |
+| `fact_crc_examenes` | `sk_fecha` | `dim_fecha` | `sk_fecha` | N:1 | Cada examen tiene una fecha |
 | `dim_runt` | `sk_ciudadano` | `dim_ciudadano` | `sk_ciudadano` | 1:1 | Un registro RUNT por ciudadano (SCD Tipo 1) |
+| `dim_runt` | `sk_fecha` | `dim_fecha` | `sk_fecha` | N:1 | Fecha de actualización RUNT |
 | `tabla_cumplimiento` | `sk_ciudadano` | `dim_ciudadano` | `sk_ciudadano` | 1:1 | Resumen analítico por ciudadano |
 | `alertas_fraude` | `ID_ciudadano` | `dim_ciudadano` | `ID_ciudadano` | N:1 | Múltiples alertas por ciudadano |
 
@@ -250,6 +296,8 @@ graph TD
 | Tabla | Grain | Ejemplo |
 |-------|-------|---------|
 | `dim_ciudadano` | 1 fila por ciudadano único | Ciudadano 101 |
+| `dim_fecha` | 1 fila por fecha única | 2025-01-15 |
+| `dim_instructor` | 1 fila por instructor único | García López |
 | `fact_cea_clases` | 1 fila por ciudadano + clase + fecha | Ciudadano 101, clase teórica, 2025-01-15 |
 | `fact_crc_examenes` | 1 fila por ciudadano + tipo examen + fecha | Ciudadano 101, examen médico, 2025-02-01 |
 | `dim_runt` | 1 fila por ciudadano (registro más reciente) | Ciudadano 101, licencia activa |

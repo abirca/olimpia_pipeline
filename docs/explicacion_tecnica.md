@@ -69,7 +69,9 @@ pipeline.py (orquestador)
 - Gold presenta el modelo listo para consumo.
 
 ### 2. Esquema Estrella en lugar de Copo de Nieve o 3FN
-- Solo 2 dimensiones simples → no hay jerarquías que normalizar.
+- 4 dimensiones conformadas (ciudadano, fecha, instructor, RUNT) conectadas a 2 tablas de hechos.
+- `DIM_FECHA` habilita análisis temporal (trimestre, mes, fin de semana) sin lógica en queries.
+- `DIM_INSTRUCTOR` permite análisis de carga y detección de fraude (F5) por instructor.
 - Power BI opera nativamente con star schema.
 - Consultas analíticas con 1 solo nivel de JOIN.
 

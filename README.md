@@ -77,6 +77,8 @@ python pipeline.py --source-dir /ruta/alternativa/
 | `data/bronze/*_bronze.parquet` | BRONZE | Datos validados con metadatos de ingesta |
 | `data/silver/*_silver.parquet` | SILVER | Datos normalizados con campos derivados |
 | `data/gold/dim_ciudadano.parquet` | GOLD | Dimensión ciudadano (surrogate key) |
+| `data/gold/dim_fecha.parquet` | GOLD | Dimensión calendario |
+| `data/gold/dim_instructor.parquet` | GOLD | Dimensión instructores CEA |
 | `data/gold/fact_cea_clases.parquet` | GOLD | Hechos de clases CEA |
 | `data/gold/fact_crc_examenes.parquet` | GOLD | Hechos de exámenes CRC |
 | `data/gold/dim_runt.parquet` | GOLD | Dimensión estado licencia RUNT |
@@ -137,27 +139,40 @@ CSV Fuentes (CEA / CRC / RUNT)
 ## Modelo Dimensional – Esquema Estrella (Star Schema)
 
 La capa **Gold** implementa un esquema estrella con `DIM_CIUDADANO` como
-dimensión central y dos tablas de hechos transaccionales.
+dimensión central, `DIM_FECHA` y `DIM_INSTRUCTOR` como dimensiones
+conformadas, y dos tablas de hechos transaccionales.
 
 ### Diagrama
 
 ```
-                    ┌──────────────────────┐
-                    │   FACT_CEA_CLASES    │
-                    │  (N clases/ciudadano)│
-                    └──────────┬───────────┘
-                               │
-┌──────────────────┐    ┌──────┴──────┐    ┌──────────────────────┐
-│    DIM_RUNT      │────│ DIM_CIUDADANO│────│  FACT_CRC_EXAMENES  │
-│ (1:1 por ciud.)  │    │   ⭐ Centro  │    │ (N exámenes/ciud.)  │
-└──────────────────┘    └──────┬──────┘    └──────────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              │                                 │
-   ┌──────────┴───────────┐          ┌──────────┴───────────┐
-   │ TABLA_CUMPLIMIENTO   │          │  ALERTAS_FRAUDE      │
-   │ (1:1 por ciudadano)  │          │ (N alertas/ciud.)    │
-   └──────────────────────┘          └──────────────────────┘
+                          ┌───────────────────┐
+                          │   DIM_FECHA       │
+                          │ sk_fecha (PK)     │
+                          │ fecha, anio, mes  │
+                          │ trimestre, dia    │
+                          └────────┬──────────┘
+                                   │
+                    ┌──────────────┼──────────────┐
+                    │              │              │
+             ┌──────┴──────┐ ┌────┴─────┐ ┌──────┴──────┐
+             │FACT_CEA     │ │FACT_CRC  │ │ DIM_RUNT    │
+             │CLASES       │ │EXAMENES  │ │ sk_runt(PK) │
+             │sk_fact_cea  │ │sk_fact_crc│ │ sk_fecha(FK)│
+             │(PK)         │ │(PK)      │ └──────┬──────┘
+             └──────┬──────┘ └────┬─────┘        │
+                    │             │               │
+┌──────────────┐  ┌─┴─────────────┴─┐  ┌─────────┘
+│DIM_INSTRUCTOR│──│  DIM_CIUDADANO   │──┘
+│sk_instructor │  │  ⭐ sk_ciudadano │
+│(PK)          │  │  (PK)           │
+└──────────────┘  └───────┬─────────┘
+                          │
+             ┌────────────┼────────────┐
+             │                         │
+  ┌──────────┴───────────┐  ┌──────────┴──────────┐
+  │ TABLA_CUMPLIMIENTO   │  │  ALERTAS_FRAUDE     │
+  │ sk_ciudadano (PK/FK) │  │  sk_alerta (PK)     │
+  └──────────────────────┘  └─────────────────────┘
 ```
 
 ### Tablas y columnas
@@ -166,23 +181,50 @@ dimensión central y dos tablas de hechos transaccionales.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
-| `sk_ciudadano` | INT (PK) | Surrogate key autoincremental |
-| `ID_ciudadano` | INT (UK) | ID natural del ciudadano |
+| `sk_ciudadano` | BIGINT (PK) | Surrogate key autoincremental |
+| `ID_ciudadano` | BIGINT (NK) | ID natural del ciudadano |
+| `_gold_run_id` | STRING | Identificador de la corrida Gold |
+| `_created_at` | TIMESTAMP | Fecha/hora de creación del registro |
 
 > **Grain**: 1 fila por ciudadano único.
+
+#### DIM_FECHA (Dimensión Calendario)
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `sk_fecha` | INT (PK) | Surrogate key |
+| `fecha` | DATE | Fecha calendario |
+| `anio` | INT | Año |
+| `mes` | INT | Mes (1-12) |
+| `dia` | INT | Día del mes |
+| `trimestre` | INT | Trimestre (1-4) |
+| `nombre_mes` | STRING | Nombre del mes |
+| `es_fin_semana` | BOOL | Sábado o domingo |
+
+> **Grain**: 1 fila por fecha única vista en todas las fuentes.
+
+#### DIM_INSTRUCTOR (Dimensión Instructor)
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `sk_instructor` | BIGINT (PK) | Surrogate key |
+| `instructor_norm` | STRING | Nombre del instructor (Title Case) |
+
+> **Grain**: 1 fila por instructor único de CEA.
 
 #### FACT_CEA_CLASES (Hechos)
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
-| `sk_ciudadano` | INT (FK) | → DIM_CIUDADANO |
-| `ID_ciudadano` | INT | ID natural |
+| `sk_fact_cea` | BIGINT (PK) | Surrogate key del hecho |
+| `sk_ciudadano` | BIGINT (FK) | → DIM_CIUDADANO |
+| `sk_fecha` | INT (FK) | → DIM_FECHA |
+| `sk_instructor` | BIGINT (FK) | → DIM_INSTRUCTOR |
 | `clase_norm` | STRING | teorica / practica |
 | `horas` | INT | Horas de la clase |
-| `instructor_norm` | STRING | Instructor (Title Case) |
-| `fecha_date` | DATE | Fecha de la clase |
-| `es_practica` | BOOLEAN | Indicador de clase práctica |
+| `es_practica` | BOOL | Indicador de clase práctica |
 | `horas_acum_ciudadano` | INT | Horas acumuladas por ciudadano |
+| `fecha_date` | DATE | Fecha de la clase |
 
 > **Grain**: 1 fila por ciudadano + clase + fecha.
 
@@ -190,12 +232,13 @@ dimensión central y dos tablas de hechos transaccionales.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
-| `sk_ciudadano` | INT (FK) | → DIM_CIUDADANO |
-| `ID_ciudadano` | INT | ID natural |
+| `sk_fact_crc` | BIGINT (PK) | Surrogate key del hecho |
+| `sk_ciudadano` | BIGINT (FK) | → DIM_CIUDADANO |
+| `sk_fecha` | INT (FK) | → DIM_FECHA |
 | `tipo_examen_norm` | STRING | medico / psicologico / coordinacion |
-| `resultado_aprobado` | BOOLEAN | Aprobó el examen |
-| `fecha_date` | DATE | Fecha del examen |
+| `resultado_aprobado` | BOOL | Aprobó el examen |
 | `examenes_aprobados_acum` | INT | Acumulado de aprobados |
+| `fecha_date` | DATE | Fecha del examen |
 
 > **Grain**: 1 fila por ciudadano + tipo de examen + fecha.
 
@@ -203,26 +246,25 @@ dimensión central y dos tablas de hechos transaccionales.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
-| `sk_ciudadano` | INT (FK) | → DIM_CIUDADANO |
-| `ID_ciudadano` | INT | ID natural |
+| `sk_runt` | BIGINT (PK) | Surrogate key |
+| `sk_ciudadano` | BIGINT (FK) | → DIM_CIUDADANO |
+| `sk_fecha` | INT (FK) | → DIM_FECHA |
 | `estado_licencia_norm` | STRING | activa / suspendida / cancelada |
-| `licencia_activa` | BOOLEAN | Licencia vigente |
-| `fecha_actualizacion_date` | DATE | Última actualización |
+| `licencia_activa` | BOOL | Licencia vigente |
 | `dias_desde_actualizacion` | INT | Días desde última actualización |
 
-> **Grain**: 1 fila por ciudadano (registro más reciente). SCD Tipo 1: se sobrescribe.
+> **Grain**: 1 fila por ciudadano (registro más reciente). SCD Tipo 1.
 
 #### TABLA_CUMPLIMIENTO (Fact Table Agregada)
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
-| `ID_ciudadano` | INT | ID natural |
-| `crc_completo` | BOOLEAN | 3 tipos de examen aprobados |
-| `cea_completo` | BOOLEAN | Al menos 1 teórica + 1 práctica |
-| `proceso_completo` | BOOLEAN | CRC + CEA ambos completos |
-| `inconsistencia_runt` | BOOLEAN | Desajuste entre proceso y RUNT |
+| `sk_ciudadano` | BIGINT (PK/FK) | → DIM_CIUDADANO |
+| `crc_completo` | BOOL | 3 tipos de examen aprobados |
+| `cea_completo` | BOOL | Al menos 1 teórica + 1 práctica |
+| `proceso_completo` | BOOL | CRC + CEA ambos completos |
+| `inconsistencia_runt` | BOOL | Desajuste entre proceso y RUNT |
 | `nivel_riesgo` | STRING | BAJO / MEDIO / ALTO / CRITICO |
-| `licencia_activa` | BOOLEAN | Estado actual de licencia |
 
 > **Grain**: 1 fila por ciudadano. Responde directamente las preguntas de negocio.
 
@@ -230,20 +272,24 @@ dimensión central y dos tablas de hechos transaccionales.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
+| `sk_alerta` | BIGINT (PK) | Surrogate key |
+| `ID_ciudadano` | BIGINT (FK) | Ciudadano afectado |
 | `tipo_alerta` | STRING | Código F1–F5 |
-| `ID_ciudadano` | INT | Ciudadano afectado |
 | `detalle` | STRING | Descripción de la anomalía |
 | `severidad` | STRING | CRITICA / ALTA / MEDIA |
-| `detectado_en` | DATETIME | Timestamp de detección |
+| `detectado_en` | TIMESTAMP | Timestamp de detección |
 
 ### Relaciones y cardinalidades
 
 ```
-DIM_CIUDADANO (1) ──── (N) FACT_CEA_CLASES
-DIM_CIUDADANO (1) ──── (N) FACT_CRC_EXAMENES
-DIM_CIUDADANO (1) ──── (1) DIM_RUNT
-DIM_CIUDADANO (1) ──── (1) TABLA_CUMPLIMIENTO
-DIM_CIUDADANO (1) ──── (N) ALERTAS_FRAUDE
+dim_ciudadano.sk_ciudadano   → 1:N → fact_cea_clases.sk_ciudadano
+dim_ciudadano.sk_ciudadano   → 1:N → fact_crc_examenes.sk_ciudadano
+dim_fecha.sk_fecha           → 1:N → fact_cea_clases.sk_fecha
+dim_fecha.sk_fecha           → 1:N → fact_crc_examenes.sk_fecha
+dim_fecha.sk_fecha           → 1:N → dim_runt.sk_fecha
+dim_instructor.sk_instructor → 1:N → fact_cea_clases.sk_instructor
+dim_ciudadano.sk_ciudadano   → 1:1 → dim_runt.sk_ciudadano
+dim_ciudadano.sk_ciudadano   → 1:1 → tabla_cumplimiento.sk_ciudadano
 ```
 
 ---

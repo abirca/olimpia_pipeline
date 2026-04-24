@@ -165,20 +165,25 @@ class TestCumplimiento:
     def _build_transformed(self, sample_cea, sample_crc, sample_runt):
         from src.transformation.transformer import (
             transform_cea, transform_crc, transform_runt,
-            build_dim_ciudadano, build_fact_cea, build_fact_crc, build_dim_runt,
+            build_dim_ciudadano, build_dim_fecha, build_dim_instructor,
+            build_fact_cea, build_fact_crc, build_dim_runt,
         )
         cea_c  = transform_cea(sample_cea.dropna(subset=["ID_ciudadano"]).copy())
         crc_c  = transform_crc(sample_crc.copy())
         runt_c = transform_runt(sample_runt.copy())
         dim    = build_dim_ciudadano(cea_c, crc_c, runt_c)
+        dim_f  = build_dim_fecha(cea_c, crc_c, runt_c)
+        dim_i  = build_dim_instructor(cea_c)
         return {
-            "cea_curated":   cea_c,
-            "crc_curated":   crc_c,
-            "runt_curated":  runt_c,
-            "fact_cea":      build_fact_cea(cea_c, dim),
-            "fact_crc":      build_fact_crc(crc_c, dim),
-            "dim_runt":      build_dim_runt(runt_c, dim),
-            "dim_ciudadano": dim,
+            "cea_curated":    cea_c,
+            "crc_curated":    crc_c,
+            "runt_curated":   runt_c,
+            "fact_cea":       build_fact_cea(cea_c, dim, dim_f, dim_i),
+            "fact_crc":       build_fact_crc(crc_c, dim, dim_f),
+            "dim_runt":       build_dim_runt(runt_c, dim, dim_f),
+            "dim_ciudadano":  dim,
+            "dim_fecha":      dim_f,
+            "dim_instructor": dim_i,
         }
 
     def test_ciudadano1_crc_completo(self, sample_cea, sample_crc, sample_runt):
