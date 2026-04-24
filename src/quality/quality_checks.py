@@ -10,6 +10,7 @@ Responsabilidad:
 
 import pandas as pd
 import numpy as np
+import json
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -48,6 +49,10 @@ def calidad_dataframe(df: pd.DataFrame, nombre: str) -> dict:
     for col in df.select_dtypes(include=["number"]).columns:
         metricas[f"stats_{col}"] = df[col].describe().round(2).to_dict()
 
+    log_path = LOG_DIR / f"calidad_{nombre}.json"
+    with open(log_path, "w", encoding="utf-8") as fp:
+        json.dump(metricas, fp, indent=2, default=str)
+
     logger.info("[Calidad] %s → %d filas | %.1f%% nulos promedio",
                 nombre, total,
                 df.isnull().mean().mean() * 100)
@@ -67,7 +72,11 @@ def generar_reporte_calidad(transformed: dict) -> dict:
         if df is not None:
             reporte[nombre] = calidad_dataframe(df, nombre)
 
-    logger.info("Reporte de calidad consolidado generado para %d fuentes", len(reporte))
+    # Guardar reporte consolidado
+    rpt_path = LOG_DIR / "reporte_calidad_consolidado.json"
+    with open(rpt_path, "w", encoding="utf-8") as fp:
+        json.dump(reporte, fp, indent=2, default=str)
+    logger.info("Reporte consolidado → %s", rpt_path)
     return reporte
 
 
@@ -274,8 +283,11 @@ def calcular_kpis(cumplimiento: pd.DataFrame, alertas: pd.DataFrame) -> dict:
         "calculado_en":                  datetime.utcnow().isoformat(),
     }
 
-    logger.info("KPIs calculados: %d ciudadanos, %.1f%% proceso completo",
-                kpis['total_ciudadanos'], kpis['pct_proceso_completo'])
+    kpi_path = LOG_DIR / "kpis.json"
+    with open(kpi_path, "w", encoding="utf-8") as fp:
+        json.dump(kpis, fp, indent=2)
+
+    logger.info("KPIs calculados → %s", kpi_path)
     return kpis
 
 

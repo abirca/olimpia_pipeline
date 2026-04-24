@@ -13,6 +13,7 @@ Uso:
 """
 
 import sys
+import json
 import logging
 import argparse
 from pathlib import Path
@@ -26,6 +27,7 @@ logger = logging.getLogger("olimpia.pipeline")
 
 BASE_DIR    = Path(__file__).resolve().parent
 GOLD_DIR    = BASE_DIR / "data" / "gold"
+LOG_DIR     = BASE_DIR / "data" / "logs"
 
 sys.path.insert(0, str(BASE_DIR))
 
@@ -83,6 +85,10 @@ def run_pipeline(source_dir: Path = None) -> dict:
         "total_rows_with_errors":  total_errores,
         "kpis": kpis,
     }
+
+    summary_path = LOG_DIR / "pipeline_summary.json"
+    with open(summary_path, "w", encoding="utf-8") as fp:
+        json.dump(summary, fp, indent=2, default=str)
 
     logger.info("\n" + "=" * 60)
     logger.info("PIPELINE COMPLETADO en %.1fs", duration)

@@ -8,6 +8,7 @@ registros corruptos/duplicados antes de pasar a curación (Silver).
 
 import pandas as pd
 import hashlib
+import json
 import logging
 import os
 from datetime import datetime
@@ -73,10 +74,11 @@ def _file_hash(path: Path) -> str:
 
 
 def _audit_log(source: str, audit: dict) -> None:
-    """Registra auditoría de ingesta en log."""
-    logger.info("Auditoría [%s]: %d válidos, %d errores, %d duplicados",
-                source, audit.get('valid_rows', 0),
-                audit.get('error_rows', 0), audit.get('duplicates_found', 0))
+    """Escribe el registro de auditoría en JSON Lines."""
+    log_path = LOG_DIR / "ingesta_audit.jsonl"
+    with open(log_path, "a", encoding="utf-8") as fp:
+        fp.write(json.dumps({"source": source, **audit}, default=str) + "\n")
+    logger.info("Auditoría guardada → %s", log_path)
 
 
 # ── Pipeline de ingesta ───────────────────────────────────────────────────────

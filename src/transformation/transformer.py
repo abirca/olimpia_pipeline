@@ -14,6 +14,7 @@ la capa SILVER con:
 import pandas as pd
 import numpy as np
 import logging
+import json
 from datetime import datetime, date
 from pathlib import Path
 
@@ -44,8 +45,13 @@ def _parse_dates(series: pd.Series, col_name: str) -> pd.Series:
 
 
 def _quality_log(source: str, metrics: dict) -> None:
-    logger.info("[Calidad] %s → %s", source,
-                ", ".join(f"{k}={v}" for k, v in metrics.items()))
+    log_path = LOG_DIR / "calidad_datos.jsonl"
+    with open(log_path, "a", encoding="utf-8") as fp:
+        fp.write(json.dumps({
+            "evaluated_at": datetime.utcnow().isoformat(),
+            "source": source,
+            **metrics,
+        }, default=str) + "\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

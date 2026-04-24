@@ -8,13 +8,16 @@ Responsabilidad:
 """
 
 import pandas as pd
+import json
 import logging
 from pathlib import Path
+from datetime import datetime
 
 logger = logging.getLogger("olimpia.exposure")
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 GOLD_DIR = BASE_DIR / "data" / "gold"
+LOG_DIR  = BASE_DIR / "data" / "logs"
 
 
 def export_dataset_final(cumplimiento: pd.DataFrame, alertas: pd.DataFrame, kpis: dict) -> Path:
@@ -54,7 +57,29 @@ def export_dataset_final(cumplimiento: pd.DataFrame, alertas: pd.DataFrame, kpis
         logger.info("Alertas fraude CSV → %s (%d alertas)", alertas_csv, len(alertas))
 
     # ── 3. Resumen ejecutivo para dashboard ───────────────────────────────────
-    logger.info("Dataset y alertas exportados correctamente")
+    resumen = {
+        "generado_en":            datetime.utcnow().isoformat(),
+        "total_ciudadanos":       kpis.get("total_ciudadanos", 0),
+        "pct_proceso_completo":   kpis.get("pct_proceso_completo", 0),
+        "pct_crc_completo":       kpis.get("pct_crc_completo", 0),
+        "pct_cea_completo":       kpis.get("pct_cea_completo", 0),
+        "inconsistencias_runt":   kpis.get("ciudadanos_inconsistencia_runt", 0),
+        "pct_inconsistencia_runt": kpis.get("pct_inconsistencia_runt", 0),
+        "alertas_fraude_total":   kpis.get("total_alertas_fraude", 0),
+        "alertas_criticas":       kpis.get("alertas_criticas", 0),
+        "distribucion_riesgo": {
+            "BAJO":    kpis.get("riesgo_bajo", 0),
+            "MEDIO":   kpis.get("riesgo_medio", 0),
+            "ALTO":    kpis.get("riesgo_alto", 0),
+            "CRITICO": kpis.get("riesgo_critico", 0),
+        },
+        "dataset_path":           str(csv_path),
+    }
+
+    resumen_path = LOG_DIR / "resumen_ejecutivo.json"
+    with open(resumen_path, "w", encoding="utf-8") as fp:
+        json.dump(resumen, fp, indent=2, default=str)
+    logger.info("Resumen ejecutivo → %s", resumen_path)
 
     return csv_path
 
