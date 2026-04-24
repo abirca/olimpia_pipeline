@@ -146,7 +146,7 @@ flowchart LR
 erDiagram
     DIM_CIUDADANO {
         bigint sk_ciudadano PK "Surrogate Key"
-        bigint ID_ciudadano NK "ID natural del ciudadano"
+        bigint ID_ciudadano "NK - ID natural del ciudadano"
         string _gold_run_id "ID corrida Gold"
         timestamp _created_at "Fecha creacion"
     }
