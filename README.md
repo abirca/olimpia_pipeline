@@ -63,10 +63,8 @@ cd olimpia_pipeline
 # 2. Instalar dependencias
 pip install pandas pyarrow
 
-# 3. Colocar los CSV en data/raw/
-cp cea_clases_500.csv   data/raw/cea_clases.csv
-cp crc_examenes_500.csv data/raw/crc_examenes.csv
-cp runt_registros_500.csv data/raw/runt_registros.csv
+# 3. Los CSV fuente ya están incluidos en data/bronze/
+#    (cea_clases.csv, crc_examenes.csv, runt_registros.csv)
 
 # 4. Ejecutar el pipeline completo
 python pipeline.py
