@@ -24,10 +24,6 @@ olimpia_pipeline/
 │   │   └── quality_checks.py       # Calidad, cumplimiento, fraude, KPIs
 │   └── exposure/
 │       └── exporter.py             # Exportación dataset final CSV + resumen ejecutivo
-├── Fabric/
-│   ├── 01_bronze_ingesta.py        # Notebook PySpark – Ingesta Bronze (Delta Tables)
-│   ├── 02_silver_transformacion.py # Notebook PySpark – Transformación Silver
-│   └── 03_gold_modelo.py           # Notebook PySpark – Gold + cumplimiento + fraude + KPIs
 ├── data/
 │   ├── bronze/                     # 🥉 Capa Bronze: CSV originales + parquet validado
 │   ├── silver/                     # 🥈 Capa Silver: datos limpios y normalizados
@@ -388,6 +384,6 @@ dim_ciudadano.sk_ciudadano   → 1:1 → tabla_cumplimiento.sk_ciudadano
 - Modelo ML de detección de fraude (Isolation Forest / Autoencoder)
 - API REST con **FastAPI** para exposición de la tabla_cumplimiento
 - ~~Integración con **Power BI**~~ ✅ Implementado (`dashboard/Superintendencia de Transporte.pbix`)
-- ~~Migración a **Microsoft Fabric**~~ ✅ Implementado (3 notebooks PySpark en `Fabric/`)
+- Migración a **Microsoft Fabric** con notebooks PySpark y Delta Lake
 - Migración a **DirectLake** en Microsoft Fabric (actualmente Import desde Parquet)
 - Notificaciones automáticas por correo/Teams vía alertas CRÍTICAS

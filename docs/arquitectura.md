@@ -306,78 +306,23 @@ graph TD
 
 ---
 
-## 7. Arquitectura en Microsoft Fabric
-
-```mermaid
-flowchart TB
-    subgraph Fabric["Microsoft Fabric Workspace"]
-        subgraph Ingest["Data Factory / Pipelines"]
-            DF["Copy Data Activity"]
-        end
-
-        subgraph Lake["Fabric Lakehouse"]
-            BZ["🥉 Bronze<br/>Delta Tables"]
-            SV["🥈 Silver<br/>Delta Tables"]
-            GL["🥇 Gold<br/>Delta Tables"]
-        end
-
-        subgraph Compute["Spark Notebooks"]
-            NB1["ingestor.py<br/>(PySpark)"]
-            NB2["transformer.py<br/>(PySpark)"]
-            NB3["quality_checks.py<br/>(PySpark)"]
-        end
-
-        subgraph Expose["Capa de Exposicion"]
-            SM["Semantic Model<br/>(DirectLake)"]
-            PBI["Power BI Dashboard<br/>Cumplimiento"]
-            DA["Data Activator<br/>Alertas Automaticas"]
-        end
-    end
-
-    DF --> NB1
-    NB1 --> BZ
-    BZ --> NB2
-    NB2 --> SV
-    NB2 --> GL
-    GL --> NB3
-    NB3 --> GL
-    GL --> SM
-    SM --> PBI
-    GL --> DA
-
-    style BZ fill:#CD7F32,stroke:#333,color:#fff
-    style SV fill:#C0C0C0,stroke:#333,color:#000
-    style GL fill:#FFD700,stroke:#333,color:#000
-```
-
-### Mapa de módulos Python → componentes Fabric
-
-| Módulo Python | Notebook Fabric | Equivalente en producción |
-|---------------|----------------|---------------------------|
-| `ingestor.py` | `01_bronze_ingesta.py` | Ingesta PySpark + validación + Delta Tables Bronze |
-| `transformer.py` | `02_silver_transformacion.py` | Normalización PySpark + Window dedup + Delta Tables Silver |
-| `gold_model.py` + `quality_checks.py` + `exporter.py` | `03_gold_modelo.py` | Modelo dimensional + cumplimiento + fraude (F1-F5) + KPIs + reporte calidad + export CSV |
-
----
-
-## 8. Decisiones Técnicas
+## 7. Decisiones Técnicas
 
 | Decisión | Elección | Justificación |
 |----------|----------|---------------|
-| Lenguaje | Python 3.9+ | Ecosistema maduro, compatible con Fabric Notebooks y PySpark |
-| Formato de almacenamiento | Parquet (local) / Delta Lake (Fabric) | Columnar, comprimido, soporte ACID en Delta |
-| Motor | Pandas (dev) / PySpark (prod) | Mismo código, diferente escala |
-| Orquestación | Script directo (dev) / Fabric Pipelines (prod) | Progresión natural sin lock-in |
+| Lenguaje | Python 3.9+ | Ecosistema maduro, compatible con PySpark |
+| Formato de almacenamiento | Parquet | Columnar, comprimido, soporte schema-on-read |
+| Motor | Pandas | Ligero para volúmenes < 1M filas |
+| Orquestación | Script directo (`pipeline.py`) | Simple, reproducible, sin dependencias externas |
 | **Modelo de datos** | **Esquema Estrella** | Óptimo para Power BI, JOINs simples, sin jerarquías profundas |
 | **Arquitectura de capas** | **Medallion (Bronze/Silver/Gold)** | Linaje completo, recuperabilidad, auditoría regulatoria |
 | Dimensión RUNT | SCD Tipo 1 (sobrescribir) | Solo interesa el estado más reciente de la licencia |
 | Surrogate keys | `sk_ciudadano` autoincremental | Desacopla el modelo analítico del ID natural |
-| **Visualización** | **Power BI Desktop (Import)** | Conecta directamente a Parquet Gold; migrable a DirectLake en Fabric |
-| **Fabric** | **3 notebooks PySpark** | Notebooks equivalentes al pipeline local, con Delta Tables y quality log |
+| **Visualización** | **Power BI Desktop (Import)** | Conecta directamente a Parquet Gold |
 
 ---
 
-## 9. Capa de Visualización – Power BI
+## 8. Capa de Visualización – Power BI
 
 El reporte `dashboard/Superintendencia de Transporte.pbix` implementa la capa
 de visualización consumiendo directamente los Parquet de **Gold**.
