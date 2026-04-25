@@ -352,13 +352,11 @@ flowchart TB
 
 ### Mapa de módulos Python → componentes Fabric
 
-| Módulo Python | Equivalente en Fabric |
-|---------------|----------------------|
-| `ingestor.py` | **Data Pipeline** + actividad Copy Data |
-| `transformer.py` | **Spark Notebook** (PySpark) en Lakehouse |
-| `quality_checks.py` | **Spark Notebook** + **Data Activator** para alertas |
-| `tabla_cumplimiento` | **Semantic Model** → Power BI DirectLake |
-| `alertas_fraude` | **Data Activator** → notificaciones Teams |
+| Módulo Python | Notebook Fabric | Equivalente en producción |
+|---------------|----------------|---------------------------|
+| `ingestor.py` | `01_bronze_ingesta.py` | Ingesta PySpark + validación + Delta Tables Bronze |
+| `transformer.py` | `02_silver_transformacion.py` | Normalización PySpark + Window dedup + Delta Tables Silver |
+| `gold_model.py` + `quality_checks.py` + `exporter.py` | `03_gold_modelo.py` | Modelo dimensional + cumplimiento + fraude (F1-F5) + KPIs + reporte calidad + export CSV |
 
 ---
 
@@ -375,6 +373,7 @@ flowchart TB
 | Dimensión RUNT | SCD Tipo 1 (sobrescribir) | Solo interesa el estado más reciente de la licencia |
 | Surrogate keys | `sk_ciudadano` autoincremental | Desacopla el modelo analítico del ID natural |
 | **Visualización** | **Power BI Desktop (Import)** | Conecta directamente a Parquet Gold; migrable a DirectLake en Fabric |
+| **Fabric** | **3 notebooks PySpark** | Notebooks equivalentes al pipeline local, con Delta Tables y quality log |
 
 ---
 
@@ -415,12 +414,12 @@ data/gold/*.parquet  →  Power BI Import  →  Modelo Estrella  →  20 Medidas
 | dim_runt → dim_fecha (sk_fecha) | N:1 | → |
 | tabla_cumplimiento ↔ dim_ciudadano (sk_ciudadano) | 1:1 | ↔ |
 
-### Medidas DAX (20 medidas en 5 carpetas)
+### Medidas DAX (26 medidas en 5 carpetas)
 
 | Carpeta | Medidas |
-|---------|---------|
-| **KPIs Generales** | Total Ciudadanos, Proceso Completo, % Proceso Completo, Riesgo Alto |
+|---------|--------|
+| **KPIs Generales** | Total Ciudadanos, Proceso Completo, % Proceso Completo, Riesgo Alto, Riesgo Critico, Riesgo Medio, Riesgo Bajo |
 | **CRC** | CRC Completo, % CRC Completo, Total Examenes CRC, Examenes Aprobados CRC, % Aprobacion CRC |
 | **CEA** | CEA Completo, % CEA Completo, Total Clases CEA, Total Horas CEA, Clases Practicas CEA, Clases Teoricas CEA |
-| **RUNT** | Inconsistencias RUNT, Licencias Activas RUNT, Prom Dias Actualizacion RUNT |
-| **Fraude** | Total Alertas Fraude, Alertas Alta Severidad |
+| **RUNT** | Inconsistencias RUNT, % Inconsistencia RUNT, Licencias Activas RUNT, Prom Dias Actualizacion RUNT |
+| **Fraude** | Total Alertas Fraude, Alertas Alta Severidad, Alertas Criticas |

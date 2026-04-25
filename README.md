@@ -15,11 +15,19 @@ olimpia_pipeline/
 │   ├── ingestion/
 │   │   └── ingestor.py             # Carga BRONZE, validación, auditoría
 │   ├── transformation/
-│   │   └── transformer.py          # Normalización, enriquecimiento, modelo dimensional
+│   │   └── transformer.py          # Normalización SILVER, enriquecimiento
+│   ├── modelo/
+│   │   └── gold_model.py           # Modelo dimensional GOLD (esquema estrella)
+│   ├── orquestacion/
+│   │   └── orchestrator.py         # Orquestación de ingesta + ETL
 │   ├── quality/
 │   │   └── quality_checks.py       # Calidad, cumplimiento, fraude, KPIs
 │   └── exposure/
 │       └── exporter.py             # Exportación dataset final CSV + resumen ejecutivo
+├── Fabric/
+│   ├── 01_bronze_ingesta.py        # Notebook PySpark – Ingesta Bronze (Delta Tables)
+│   ├── 02_silver_transformacion.py # Notebook PySpark – Transformación Silver
+│   └── 03_gold_modelo.py           # Notebook PySpark – Gold + cumplimiento + fraude + KPIs
 ├── data/
 │   ├── bronze/                     # 🥉 Capa Bronze: CSV originales + parquet validado
 │   ├── silver/                     # 🥈 Capa Silver: datos limpios y normalizados
@@ -33,10 +41,9 @@ olimpia_pipeline/
 │   ├── reglas_negocio.md           # Reglas de negocio y detección de fraude
 │   ├── validaciones_calidad.md     # Validaciones de calidad por capa
 │   ├── explicacion_tecnica.md      # Decisiones técnicas, stack, migración a Fabric
-│   ├── mejoras_futuras.md          # Roadmap de mejoras a corto/mediano/largo plazo
-│   └── presentacion.md            # Guion de presentación (5 diapositivas)
+│   └── mejoras_futuras.md          # Roadmap de mejoras a corto/mediano/largo plazo
 ├── tests/
-│   └── test_pipeline.py            # Tests unitarios
+│   └── test_pipeline.py            # Tests unitarios (13 tests)
 └── README.md
 ```
 
@@ -149,8 +156,8 @@ estrella completo.
 | Componente | Detalle |
 |---|---|
 | **Tablas** | 8 tablas: dim_ciudadano, dim_fecha, dim_instructor, dim_runt, fact_cea_clases, fact_crc_examenes, tabla_cumplimiento, alertas_fraude |
-| **Relaciones** | 8 relaciones (7 one-to-many + 1 one-to-one) |
-| **Medidas DAX** | 20 medidas organizadas en carpetas: KPIs Generales, CRC, CEA, RUNT, Fraude |
+| **Relaciones** | 9 relaciones (7 activas + 2 inactivas para evitar ambigüedad de filtro) |
+| **Medidas DAX** | 26 medidas organizadas en carpetas: KPIs Generales, CRC, CEA, RUNT, Fraude |
 | **Tabla de fechas** | dim_fecha marcada como tabla de fechas para time intelligence |
 
 ### Medidas DAX disponibles
@@ -381,5 +388,6 @@ dim_ciudadano.sk_ciudadano   → 1:1 → tabla_cumplimiento.sk_ciudadano
 - Modelo ML de detección de fraude (Isolation Forest / Autoencoder)
 - API REST con **FastAPI** para exposición de la tabla_cumplimiento
 - ~~Integración con **Power BI**~~ ✅ Implementado (`dashboard/Superintendencia de Transporte.pbix`)
+- ~~Migración a **Microsoft Fabric**~~ ✅ Implementado (3 notebooks PySpark en `Fabric/`)
 - Migración a **DirectLake** en Microsoft Fabric (actualmente Import desde Parquet)
 - Notificaciones automáticas por correo/Teams vía alertas CRÍTICAS
