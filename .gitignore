@@ -26,6 +26,11 @@ data/logs/
 .DS_Store
 Thumbs.db
 
+# Documentos locales (no subir a GitHub)
+*.docx
+docs/analisis_datos_presentacion.md
+docs/presentacion.md
+
 # Pytest
 .pytest_cache/
 

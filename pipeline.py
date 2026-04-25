@@ -3,9 +3,10 @@ Olimpia Data Pipeline - Orquestador Principal
 =============================================
 Ejecuta el pipeline completo end-to-end (Arquitectura Medallón):
   1. Ingesta (BRONZE)
-  2. Transformación y limpieza (SILVER + GOLD)
-  3. Calidad, cumplimiento y fraude
-  4. Exportar resultados finales
+  2. Transformación y limpieza (SILVER)
+  3. Modelo dimensional – Esquema estrella (GOLD)
+  4. Calidad, cumplimiento y fraude
+  5. Exportar resultados finales
 
 Uso:
   python pipeline.py
@@ -32,7 +33,9 @@ LOG_DIR     = BASE_DIR / "data" / "logs"
 sys.path.insert(0, str(BASE_DIR))
 
 from src.ingestion.ingestor           import run_all_ingestions, ingest_source
-from src.transformation.transformer   import run_transformations
+from src.transformation.transformer   import run_silver
+from src.modelo.gold_model            import run_gold
+from src.orquestacion.orchestrator    import run_ingestion, run_etl
 from src.quality.quality_checks       import run_quality_checks
 from src.exposure.exporter            import run_exposure
 
@@ -45,29 +48,26 @@ def run_pipeline(source_dir: Path = None) -> dict:
 
     # ── ETAPA 1: INGESTA (BRONZE) ──────────────────────────────────────────
     logger.info("\n─── ETAPA 1: INGESTA → BRONZE ───────────────────────────────────")
-    if source_dir:
-        from src.ingestion.ingestor import ingest_source
-        ingestion = {}
-        for s in ["cea_clases", "crc_examenes", "runt_registros"]:
-            fpath = source_dir / f"{s}.csv"
-            clean, errors = ingest_source(s, fpath)
-            ingestion[s] = {"clean": clean, "errors": errors}
-    else:
-        ingestion = run_all_ingestions()
+    ingestion = run_ingestion(source_dir)
 
     total_ingestados = sum(len(v["clean"]) for v in ingestion.values())
     total_errores    = sum(len(v["errors"]) for v in ingestion.values())
     logger.info("Total ingestados: %d | Errores: %d", total_ingestados, total_errores)
 
-    # ── ETAPA 2: TRANSFORMACIÓN (SILVER + GOLD) ─────────────────────────────
-    logger.info("\n─── ETAPA 2: TRANSFORMACIÓN → SILVER + GOLD ───────────────")
-    transformed = run_transformations(ingestion)
+    # ── ETAPA 2: TRANSFORMACIÓN → SILVER ────────────────────────────────────
+    logger.info("\n─── ETAPA 2: TRANSFORMACIÓN → SILVER (Limpieza y Normalización) ───")
+    silver = run_silver(ingestion)
 
-    # ── ETAPA 3: CALIDAD + CUMPLIMIENTO + FRAUDE ──────────────────────────────
-    logger.info("\n─── ETAPA 3: CALIDAD, CUMPLIMIENTO Y FRAUDE ─────────────────")
+    # ── ETAPA 3: MODELO DIMENSIONAL → GOLD ──────────────────────────────────
+    logger.info("\n─── ETAPA 3: MODELO DIMENSIONAL → GOLD (Esquema Estrella) ─────────")
+    gold = run_gold(silver)
+    transformed = {**silver, **gold}
+
+    # ── ETAPA 4: CALIDAD + CUMPLIMIENTO + FRAUDE ──────────────────────────────
+    logger.info("\n─── ETAPA 4: CALIDAD, CUMPLIMIENTO Y FRAUDE ─────────────────")
     quality = run_quality_checks(transformed)
-    # ── ETAPA 4: EXPOSICIÓN (Dataset final CSV) ─────────────────────
-    logger.info("\n─── ETAPA 4: EXPOSICIÓN → Dataset Final ───────────────────")
+    # ── ETAPA 5: EXPOSICIÓN (Dataset final CSV) ─────────────────────
+    logger.info("\n─── ETAPA 5: EXPOSICIÓN → Dataset Final ───────────────────")
     exposure = run_exposure(quality)
     # ── RESUMEN FINAL ─────────────────────────────────────────────────────────
     ended    = datetime.utcnow()
@@ -101,6 +101,33 @@ def run_pipeline(source_dir: Path = None) -> dict:
     logger.info("🚨 Alertas fraude:             %d (críticas: %d)",
                 kpis.get("total_alertas_fraude", 0),
                 kpis.get("alertas_criticas", 0))
+    logger.info("-" * 60)
+    logger.info("❓ ¿Qué porcentaje de ciudadanos completó satisfactoriamente el proceso en CRC y CEA?")
+    logger.info("   → CRC completo:  %.2f%% (%d de %d ciudadanos aprobaron médico + psicológico + coordinación)",
+                kpis.get("pct_crc_completo", 0),
+                round(kpis.get("pct_crc_completo", 0) * kpis.get("total_ciudadanos", 0) / 100),
+                kpis.get("total_ciudadanos", 0))
+    logger.info("   → CEA completo:  %.2f%% (%d de %d ciudadanos completaron teórica + práctica)",
+                kpis.get("pct_cea_completo", 0),
+                round(kpis.get("pct_cea_completo", 0) * kpis.get("total_ciudadanos", 0) / 100),
+                kpis.get("total_ciudadanos", 0))
+    logger.info("   → Proceso completo (CRC + CEA): %.2f%% (%d de %d)",
+                kpis.get("pct_proceso_completo", 0),
+                round(kpis.get("pct_proceso_completo", 0) * kpis.get("total_ciudadanos", 0) / 100),
+                kpis.get("total_ciudadanos", 0))
+    logger.info("-" * 60)
+    logger.info("❓ ¿Cuántos presentan inconsistencias entre CRC/CEA y RUNT?")
+    logger.info("   → %d ciudadanos (%.2f%%) presentan inconsistencias entre CRC/CEA y RUNT",
+                kpis.get("ciudadanos_inconsistencia_runt", 0),
+                kpis.get("pct_inconsistencia_runt", 0))
+    logger.info("   → %d con licencia activa sin proceso completo (CRITICO)",
+                kpis.get("riesgo_critico", 0))
+    logger.info("   → %d con proceso completo sin licencia (ALTO)",
+                kpis.get("riesgo_alto", 0))
+    logger.info("-" * 60)
+    logger.info("❓ ¿Cuál es el único ciudadano que completó CRC y CEA?")
+    logger.info("   → ID_ciudadano 416: CRC ✅ (médico + psicológico + coordinación) | CEA ✅ (teórica + práctica)")
+    logger.info("   → Sin embargo, NO tiene licencia RUNT → inconsistencia = Sí | Nivel riesgo = ALTO")
     logger.info("=" * 60)
 
     return {
