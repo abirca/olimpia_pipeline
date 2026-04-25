@@ -112,7 +112,9 @@ def build_tabla_cumplimiento(transformed: dict) -> pd.DataFrame:
 
     crc_summary = fact_crc_ext.groupby("ID_ciudadano").apply(
         lambda g: pd.Series({
-            "tipos_examen_realizados": set(g["tipo_examen_norm"].dropna().tolist()),
+            "examen_medico":           "medico" in set(g["tipo_examen_norm"].dropna().tolist()),
+            "examen_psicologico":      "psicologico" in set(g["tipo_examen_norm"].dropna().tolist()),
+            "examen_coordinacion":     "coordinacion" in set(g["tipo_examen_norm"].dropna().tolist()),
             "total_examenes":          len(g),
             "examenes_aprobados":      int(g["resultado_aprobado"].sum()),
             "examenes_reprobados":     int((~g["resultado_aprobado"]).sum()),
@@ -120,8 +122,8 @@ def build_tabla_cumplimiento(transformed: dict) -> pd.DataFrame:
         })
     ).reset_index()
 
-    crc_summary["crc_tipos_completos"] = crc_summary["tipos_examen_realizados"].apply(
-        lambda s: TIPOS_REQUERIDOS.issubset(s)
+    crc_summary["crc_tipos_completos"] = (
+        crc_summary["examen_medico"] & crc_summary["examen_psicologico"] & crc_summary["examen_coordinacion"]
     )
     crc_summary["crc_todos_aprobados"] = (
         crc_summary["examenes_reprobados"] == 0
@@ -135,7 +137,7 @@ def build_tabla_cumplimiento(transformed: dict) -> pd.DataFrame:
         lambda g: pd.Series({
             "clases_teoricas":    int((g["clase_norm"].str.contains("teoric", na=False)).sum()),
             "clases_practicas":   int(g["es_practica"].sum()),
-            "total_horas":        int(g["horas"].sum()),
+            "total_horas_cea":    int(g["horas"].sum()),
             "ultima_clase_fecha": g["fecha_date"].max(),
         })
     ).reset_index()

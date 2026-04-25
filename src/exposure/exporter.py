@@ -32,19 +32,25 @@ def export_dataset_final(cumplimiento: pd.DataFrame, alertas: pd.DataFrame, kpis
     """
     # ── 1. Exportar tabla cumplimiento a CSV ──────────────────────────────────
     cols_export = [
-        "sk_ciudadano", "ID_ciudadano", "crc_completo", "cea_completo",
+        "sk_ciudadano", "ID_ciudadano",
+        # CRC
+        "examen_medico", "examen_psicologico", "examen_coordinacion",
+        "total_examenes", "examenes_aprobados", "examenes_reprobados",
+        "ultimo_examen_fecha", "crc_completo",
+        # CEA
+        "clases_teoricas", "clases_practicas", "total_horas_cea",
+        "ultima_clase_fecha", "cea_completo",
+        # RUNT
+        "estado_licencia_norm", "licencia_activa",
+        "dias_desde_actualizacion",
+        # Resultados
         "proceso_completo", "inconsistencia_runt", "nivel_riesgo",
-        "licencia_activa", "estado_licencia_norm",
     ]
-    cols_disponibles = [c for c in cols_export if c in cumplimiento.columns]
-    df_export = cumplimiento[cols_disponibles].copy()
 
-    # Convertir booleanos a Sí/No para legibilidad
-    bool_cols = ["crc_completo", "cea_completo", "proceso_completo",
-                 "inconsistencia_runt", "licencia_activa"]
-    for col in bool_cols:
-        if col in df_export.columns:
-            df_export[col] = df_export[col].map({True: "Sí", False: "No"})
+    df_export = cumplimiento.copy()
+
+    cols_disponibles = [c for c in cols_export if c in df_export.columns]
+    df_export = df_export[cols_disponibles]
 
     csv_path = GOLD_DIR / "dataset_final_cumplimiento.csv"
     df_export.to_csv(csv_path, index=False, encoding="utf-8")
